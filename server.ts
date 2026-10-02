@@ -6,7 +6,6 @@ import crypto from 'crypto';
 import os from 'os';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import { DEFAULT_INVENTORY_ITEMS, DEFAULT_PRODUCT_MAPPINGS } from './src/lib/admin/default-inventory';
 import { generateAndSaveBillPdf } from './src/lib/billing/pdf-generator';
 import { uploadBillToGoogleDrive } from './src/lib/drive/google-drive-service';
@@ -93,11 +92,39 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
 
 app.use(express.json({ limit: '10mb' }));
 
-// Ensure data directory exists
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Determine a writable data directory for store persistence:
+// - Locally / on standard servers: ./data (if writable)
+// - On Vercel Serverless / AWS Lambda / read-only filesystem: os.tmpdir()/momentpress-data
+function resolveDataDir(): string {
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const localDir = path.resolve(process.cwd(), 'data');
+
+  if (!isServerless) {
+    try {
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      const testFile = path.join(localDir, `.writetest-${Date.now()}`);
+      fs.writeFileSync(testFile, 'ok');
+      fs.unlinkSync(testFile);
+      return localDir;
+    } catch (_) {
+      // Local dir is not writable; fall back to temporary directory
+    }
+  }
+
+  const tmpDir = path.join(os.tmpdir(), 'momentpress-data');
+  try {
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    return tmpDir;
+  } catch (_) {
+    return os.tmpdir();
+  }
 }
+
+const DATA_DIR = resolveDataDir();
 const DATA_FILE = path.join(DATA_DIR, 'momentpress-store.json');
 
 // Cryptographic helpers
@@ -137,11 +164,20 @@ const MAX_BILLS_PER_WINDOW = 120; // 120 requests per 5 min window per IP
 const BILL_WINDOW_MS = 5 * 60 * 1000;
 
 function getClientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.socket.remoteAddress || 'unknown-ip';
+  try {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      return forwarded.split(',')[0].trim();
+    }
+    const realIp = req.headers['x-real-ip'];
+    if (typeof realIp === 'string' && realIp.trim()) {
+      return realIp.trim();
+    }
+    if (req.socket && req.socket.remoteAddress) {
+      return req.socket.remoteAddress;
+    }
+  } catch (_) {}
+  return 'unknown-ip';
 }
 
 // Data Store Interface
@@ -619,6 +655,13 @@ let store: StoreData = (function loadStore(): StoreData {
     console.warn(`Attempting recovery from backup store: ${BACKUP_FILE}`);
     parsed = tryParse(BACKUP_FILE);
   }
+  // Check if a seed store exists in the project root if DATA_DIR is tmpdir
+  if (!parsed) {
+    const seedFile = path.resolve(process.cwd(), 'data', 'momentpress-store.json');
+    if (fs.existsSync(seedFile)) {
+      parsed = tryParse(seedFile);
+    }
+  }
 
   if (parsed) {
     const now = Date.now();
@@ -713,10 +756,14 @@ let store: StoreData = (function loadStore(): StoreData {
   }
 
   const initial = createInitialStore();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2), 'utf-8');
   try {
-    fs.copyFileSync(DATA_FILE, BACKUP_FILE);
-  } catch (_) {}
+    fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2), 'utf-8');
+    try {
+      fs.copyFileSync(DATA_FILE, BACKUP_FILE);
+    } catch (_) {}
+  } catch (writeErr) {
+    console.warn('Could not write initial store to disk (ephemeral memory in use):', writeErr);
+  }
   return initial;
 })();
 
@@ -736,7 +783,25 @@ function saveStore(): void {
       fs.copyFileSync(DATA_FILE, BACKUP_FILE);
     } catch (_) {}
   } catch (err) {
-    console.error('Failed saving store to disk:', err);
+    console.warn('Failed saving store to disk (continuing with in-memory store):', err);
+  }
+}
+
+function getBillsDir(): string {
+  const dir = path.join(DATA_DIR, 'bills');
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  } catch (err) {
+    const fallback = path.join(os.tmpdir(), 'momentpress-bills');
+    try {
+      if (!fs.existsSync(fallback)) {
+        fs.mkdirSync(fallback, { recursive: true });
+      }
+    } catch (_) {}
+    return fallback;
   }
 }
 
@@ -1820,7 +1885,7 @@ app.get('/api/public/bills/:token/pdf', async (req: Request, res: Response) => {
 
   try {
     const billData = buildPublicBillData(order);
-    const billsDir = path.join(process.cwd(), 'data', 'bills');
+    const billsDir = getBillsDir();
     const filePath = order.billPdfPath && fs.existsSync(order.billPdfPath)
       ? order.billPdfPath
       : path.join(billsDir, `MomentPress-Bill-${order.id}.pdf`);
@@ -1912,7 +1977,7 @@ app.get('/api/admin/orders/:id/pdf', requireAdminAuth, async (req: Request, res:
   }
 
   try {
-    const billsDir = path.join(process.cwd(), 'data', 'bills');
+    const billsDir = getBillsDir();
     let filePath = order.billPdfPath;
 
     if (!filePath || !fs.existsSync(filePath)) {
@@ -1981,7 +2046,7 @@ app.post('/api/admin/orders/:id/bill', requireAdminAuth, async (req: Request, re
     order.billGenerated = true;
 
     // 1. Generate local vector PDF
-    const billsDir = path.join(process.cwd(), 'data', 'bills');
+    const billsDir = getBillsDir();
     const billData = buildPublicBillData(order);
     const generated = await generateAndSaveBillPdf(billData, billsDir);
 
@@ -2929,11 +2994,30 @@ app.all('/api/*', (req: Request, res: Response) => {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });
 
+// Global Express Error Handler: Guarantee JSON response for all API errors
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  console.error('[API Server Error]', err);
+  if (!res.headersSent) {
+    const status =
+      typeof err?.status === 'number' && err.status >= 400 && err.status < 600
+        ? err.status
+        : typeof err?.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600
+        ? err.statusCode
+        : 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.status(status).json({
+      error: err?.message || 'An internal server error occurred',
+      success: false,
+    });
+  }
+});
+
 // ==========================================
 // VITE DEV MIDDLEWARE OR PRODUCTION STATIC
 // ==========================================
 async function startServer() {
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,

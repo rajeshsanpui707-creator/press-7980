@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { PublicBillData } from '../../types/admin';
 
 /**
@@ -558,15 +559,34 @@ export function generateBillPdfBuffer(billData: PublicBillData): Buffer {
  * Generates and writes bill PDF to local storage.
  */
 export async function generateAndSaveBillPdf(billData: PublicBillData, targetDir = 'data/bills'): Promise<{ filePath: string; fileName: string; buffer: Buffer }> {
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
+  let effectiveDir = targetDir;
+  try {
+    if (!fs.existsSync(effectiveDir)) {
+      fs.mkdirSync(effectiveDir, { recursive: true });
+    }
+  } catch (_) {
+    effectiveDir = path.join(os.tmpdir(), 'momentpress-bills');
+    try {
+      if (!fs.existsSync(effectiveDir)) {
+        fs.mkdirSync(effectiveDir, { recursive: true });
+      }
+    } catch (_) {}
   }
 
   const numericSuffix = String(billData.orderId || '').replace(/^MP-/i, '').trim();
   const fileName = `MomentPress-Bill-MP-${numericSuffix || billData.orderId}.pdf`;
-  const filePath = path.join(targetDir, fileName);
+  const filePath = path.join(effectiveDir, fileName);
   const buffer = generateBillPdfBuffer(billData);
 
-  await fs.promises.writeFile(filePath, buffer);
+  try {
+    await fs.promises.writeFile(filePath, buffer);
+  } catch (err) {
+    console.warn('[PDF Generator] Local write warning:', err);
+    const fallbackPath = path.join(os.tmpdir(), fileName);
+    try {
+      await fs.promises.writeFile(fallbackPath, buffer);
+      return { filePath: fallbackPath, fileName, buffer };
+    } catch (_) {}
+  }
   return { filePath, fileName, buffer };
 }
