@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import os from 'os';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { DEFAULT_INVENTORY_ITEMS, DEFAULT_PRODUCT_MAPPINGS } from './src/lib/admin/default-inventory';
 import { generateAndSaveBillPdf } from './src/lib/billing/pdf-generator';
@@ -14,7 +15,7 @@ import type { PublicBillData } from './src/types/admin';
 
 dotenv.config();
 
-const app = express();
+export const app = express();
 const args = process.argv.slice(2);
 const portIndex = args.indexOf('--port');
 const cliPort = portIndex !== -1 && args[portIndex + 1] ? parseInt(args[portIndex + 1], 10) : null;
@@ -2966,7 +2967,19 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+// Only listen when executed directly, not when imported (e.g. by Vercel serverless api/index.ts)
+const isDirectExecution = Boolean(
+  process.argv[1] &&
+  fileURLToPath(import.meta.url).toLowerCase() === path.resolve(process.argv[1]).toLowerCase()
+);
+
+if (isDirectExecution && !process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+
+export { startServer };
+export default app;
+
