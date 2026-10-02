@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /custom-photo-frames
+Allow: /photo-stickers
+Allow: /existing-designs
+Allow: /faq
+Allow: /contact
+
+# Private Admin, Orders and API Routes
+Disallow: /admin/
+Disallow: /api/
+Disallow: /order/
+
+# XML Sitemap
+Sitemap: https://momentpress.ai.studio/sitemap.xml

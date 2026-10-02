@@ -1,0 +1,8 @@
+{
+  "name": "MomentPress Studio",
+  "description": "Your Photos. Your Story. Your Frame. Turn your favorite moments into beautiful personalized frames and photo products.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

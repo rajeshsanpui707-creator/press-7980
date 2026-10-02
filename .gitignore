@@ -1,0 +1,25 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+data/*.tmp*
+data/*.backup
+*.tmp
+
+# Credentials, Keys & Secrets (Zero Leakage)
+credentials/
+secrets/
+*service-account*.json
+*service_account*.json
+google-credentials*.json
+*.pem
+*.key
+*.p12
+
+
+
+data/
