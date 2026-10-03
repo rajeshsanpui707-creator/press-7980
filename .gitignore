@@ -6,8 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
-data/*.tmp*
-data/*.backup
+data/
+*.backup
+*.bak
 *.tmp
 
 # Credentials, Keys & Secrets (Zero Leakage)
@@ -19,7 +20,3 @@ google-credentials*.json
 *.pem
 *.key
 *.p12
-
-
-
-/data/$
