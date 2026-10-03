@@ -30,20 +30,20 @@ export function getGoogleDriveFolderId(): string {
   return (process.env.GOOGLE_DRIVE_FOLDER_ID && process.env.GOOGLE_DRIVE_FOLDER_ID.trim()) || DEFAULT_BILL_FOLDER_ID;
 }
 
-export function formatBillFileName(orderId: string): string {
+export function formatBillFileName(orderId: string, billNumber?: string): string {
   const numericSuffix = String(orderId || '').replace(/^MP-/i, '').trim();
   return `MomentPress-Bill-MP-${numericSuffix || orderId}.pdf`;
 }
 
-export function getGoogleDriveAuthType(): 'SERVICE_ACCOUNT' | 'OAUTH_REFRESH_TOKEN' | 'NONE' {
+export function getGoogleDriveAuthType(): 'OAUTH_REFRESH_TOKEN' | 'SERVICE_ACCOUNT' | 'NONE' {
+  if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+    return 'OAUTH_REFRESH_TOKEN';
+  }
   if (
     (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && process.env.GOOGLE_SERVICE_ACCOUNT_KEY.trim()) ||
     (process.env.GOOGLE_APPLICATION_CREDENTIALS && process.env.GOOGLE_APPLICATION_CREDENTIALS.trim())
   ) {
     return 'SERVICE_ACCOUNT';
-  }
-  if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
-    return 'OAUTH_REFRESH_TOKEN';
   }
   return 'NONE';
 }
@@ -218,19 +218,22 @@ export async function uploadBillToGoogleDrive(params: {
     // 4. Remote Duplicate Check: Search target folder for existing file with same name
     if (!params.forceReupload) {
       const escapedFileName = fileName.replace(/'/g, "\\'");
-      const searchQuery = encodeURIComponent(`'${folderId}' in parents and name = '${escapedFileName}' and trashed = false`);
+      const legacyFileName = `MomentPress-Bill-${params.orderId}.pdf`.replace(/'/g, "\\'");
+      const searchQuery = encodeURIComponent(
+        `'${folderId}' in parents and (name = '${escapedFileName}' or name = '${legacyFileName}') and trashed = false`
+      );
       const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${searchQuery}&fields=files(id,name,webViewLink,webContentLink)`,
+        `https://www.googleapis.com/drive/v3/files?q=${searchQuery}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,webViewLink,webContentLink)`,
         { headers: authHeaders }
       );
 
       if (searchRes.ok) {
-        const searchJson = await searchRes.json() as any;
+        const searchJson = (await searchRes.json()) as any;
         const existing = searchJson.files && searchJson.files[0];
         if (existing && existing.id) {
           // File already exists in the folder - ensure permission is set and reuse
           try {
-            await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}/permissions`, {
+            await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}/permissions?supportsAllDrives=true`, {
               method: 'POST',
               headers: { ...authHeaders, 'Content-Type': 'application/json' },
               body: JSON.stringify({ role: 'reader', type: 'anyone' }),
@@ -247,7 +250,7 @@ export async function uploadBillToGoogleDrive(params: {
             message: 'Existing Google Drive bill found in folder and reused (duplicate upload prevented).',
             folderPath,
             folderId,
-            fileName,
+            fileName: existing.name || fileName,
             fileId: existing.id,
             webViewLink,
             webContentLink,
@@ -268,7 +271,7 @@ export async function uploadBillToGoogleDrive(params: {
     const { body: multipartData, boundary } = buildMultipartBody(fileMetadata, params.pdfBuffer);
 
     const uploadRes = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink',
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink,webContentLink',
       {
         method: 'POST',
         headers: {
@@ -276,7 +279,7 @@ export async function uploadBillToGoogleDrive(params: {
           'Content-Type': `multipart/related; boundary=${boundary}`,
           'Content-Length': String(multipartData.length),
         },
-        body: new Uint8Array(multipartData) as unknown as BodyInit,
+        body: multipartData as unknown as BodyInit,
       }
     );
 
@@ -293,7 +296,7 @@ export async function uploadBillToGoogleDrive(params: {
       if (uploadRes.status === 404 || uploadRes.status === 403) {
         return {
           status: 'ERROR',
-          message: `Google Drive upload blocked: Folder ${folderId} is not accessible. Please ensure folder is shared with the Service Account email with Editor permission. Details: ${parsedErr}`,
+          message: `Google Drive upload blocked: Folder ${folderId} is not accessible. Please ensure folder is valid and shared with the authenticated account. Details: ${parsedErr}`,
           folderPath,
           folderId,
           fileName,
@@ -314,17 +317,25 @@ export async function uploadBillToGoogleDrive(params: {
 
     // 6. Grant Reader Permission to Anyone with Link (ONLY for this specific PDF, not folder)
     if (fileId) {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role: 'reader',
-          type: 'anyone',
-        }),
-      });
+      try {
+        const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
+          method: 'POST',
+          headers: {
+            ...authHeaders,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            role: 'reader',
+            type: 'anyone',
+          }),
+        });
+        if (!permRes.ok) {
+          const permErr = await permRes.text();
+          console.warn(`[Google Drive] Setting public link permission note for ${fileId}:`, permErr);
+        }
+      } catch (permErr: any) {
+        console.warn(`[Google Drive] Setting public link permission error:`, permErr?.message || permErr);
+      }
     }
 
     const webViewLink = uploadJson.webViewLink || `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;

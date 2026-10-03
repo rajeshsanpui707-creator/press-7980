@@ -1777,11 +1777,11 @@ function buildPublicBillData(order: any): PublicBillData {
     billDriveDownloadUrl: order.billDriveDownloadUrl,
     billDriveStatus: order.billDriveStatus,
     customer: {
-      name: order.customerName || 'Valued Customer',
-      mobileNumber: order.mobileNumber || '',
-      address: order.address || '',
-      city: order.city || 'Kolkata',
-      pincode: order.pincode || '',
+      name: order.customerName || order.customer?.name || 'Valued Customer',
+      mobileNumber: order.mobileNumber || order.customer?.phone || order.phone || '',
+      address: order.address || order.customer?.address || '',
+      city: order.city || order.customer?.city || 'Kolkata',
+      pincode: order.pincode || order.customer?.pincode || '',
     },
     item: {
       product: order.product || 'Custom Photo Frames',
@@ -1791,7 +1791,7 @@ function buildPublicBillData(order: any): PublicBillData {
       quantity: Number(order.quantity) || 1,
       unitPrice: Number(order.unitPrice ?? order.sellingPrice ?? order.finalAmount) || 0,
       discount: Number(order.discount) || 0,
-      finalAmount: Number(order.finalAmount) || 0,
+      finalAmount: Number(order.finalAmount ?? order.totalPrice) || 0,
       requirements: order.requirements || '',
     },
     studio: {
@@ -1886,21 +1886,24 @@ app.get('/api/public/bills/:token/pdf', async (req: Request, res: Response) => {
   try {
     const billData = buildPublicBillData(order);
     const billsDir = getBillsDir();
-    const filePath = order.billPdfPath && fs.existsSync(order.billPdfPath)
-      ? order.billPdfPath
-      : path.join(billsDir, `MomentPress-Bill-${order.id}.pdf`);
+    let pdfBuffer: Buffer;
 
-    if (!fs.existsSync(filePath)) {
+    if (order.billPdfPath && fs.existsSync(order.billPdfPath)) {
+      pdfBuffer = await fs.promises.readFile(order.billPdfPath);
+    } else {
       const generated = await generateAndSaveBillPdf(billData, billsDir);
       order.billPdfPath = generated.filePath;
       order.billFileName = generated.fileName;
       saveStore();
+      pdfBuffer = generated.buffer;
     }
 
-    const fileName = `MomentPress-Bill-${order.id}.pdf`;
+    const numericSuffix = (order.id || '').replace(/^MP-/i, '');
+    const fileName = `MomentPress-Bill-MP-${numericSuffix || order.id}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    fs.createReadStream(filePath).pipe(res);
+    res.setHeader('Content-Length', String(pdfBuffer.length));
+    res.send(pdfBuffer);
   } catch (err: any) {
     console.error('Error streaming public bill PDF:', err);
     res.status(500).json({ error: 'Failed to generate PDF' });
@@ -1978,9 +1981,9 @@ app.get('/api/admin/orders/:id/pdf', requireAdminAuth, async (req: Request, res:
 
   try {
     const billsDir = getBillsDir();
-    let filePath = order.billPdfPath;
+    let pdfBuffer: Buffer;
 
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!order.billPdfPath || !fs.existsSync(order.billPdfPath)) {
       const numericSuffix = (order.id || '').replace(/^MP-/i, '');
       order.billNumber = order.billNumber || `MP-BILL-${numericSuffix || Date.now()}`;
       order.billToken = order.billToken || crypto.randomBytes(24).toString('hex');
@@ -1992,7 +1995,9 @@ app.get('/api/admin/orders/:id/pdf', requireAdminAuth, async (req: Request, res:
       order.billPdfPath = generated.filePath;
       order.billFileName = generated.fileName;
       saveStore();
-      filePath = generated.filePath;
+      pdfBuffer = generated.buffer;
+    } else {
+      pdfBuffer = await fs.promises.readFile(order.billPdfPath);
     }
 
     const isDownload = req.query.download === 'true';
@@ -2002,7 +2007,8 @@ app.get('/api/admin/orders/:id/pdf', requireAdminAuth, async (req: Request, res:
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `${disposition}; filename="${fileName}"`);
-    fs.createReadStream(filePath).pipe(res);
+    res.setHeader('Content-Length', String(pdfBuffer.length));
+    res.send(pdfBuffer);
   } catch (err: any) {
     console.error('Error generating or streaming PDF:', err);
     res.status(500).json({ error: 'Failed to stream PDF' });
@@ -2020,16 +2026,30 @@ app.post('/api/admin/orders/:id/bill', requireAdminAuth, async (req: Request, re
   }
 
   if (!order) {
-    res.status(404).json({ error: 'Order not found' });
+    res.status(404).json({ success: false, error: 'Order not found', code: 'BILL_ORDER_NOT_FOUND' });
     return;
   }
 
-  // Idempotency: If bill already generated and file exists, unless regenerate is requested, return existing
-  if (!isRegenerate && order.billGenerated && order.billNumber && order.billToken && order.billPdfPath && fs.existsSync(order.billPdfPath)) {
+  // Idempotency: If bill already generated and verified in Drive or local file exists, unless regenerate is requested, return existing
+  if (
+    !isRegenerate &&
+    order.billGenerated &&
+    order.billNumber &&
+    (order.billDriveStatus === 'VERIFIED' || (order.billPdfPath && fs.existsSync(order.billPdfPath)))
+  ) {
     res.json({
       success: true,
       alreadyGenerated: true,
       order,
+      driveResult: {
+        status: order.billDriveStatus || 'VERIFIED',
+        message: order.billDriveMessage || 'Bill already generated and verified.',
+        fileId: order.billDriveFileId,
+        webViewLink: order.billDriveUrl,
+        webContentLink: order.billDriveDownloadUrl,
+        uploadedAt: order.billUploadedAt,
+        reused: true,
+      },
     });
     return;
   }
@@ -2046,12 +2066,22 @@ app.post('/api/admin/orders/:id/bill', requireAdminAuth, async (req: Request, re
     order.billGenerated = true;
 
     // 1. Generate local vector PDF
-    const billsDir = getBillsDir();
-    const billData = buildPublicBillData(order);
-    const generated = await generateAndSaveBillPdf(billData, billsDir);
-
-    order.billPdfPath = generated.filePath;
-    order.billFileName = generated.fileName;
+    let generated;
+    try {
+      const billsDir = getBillsDir();
+      const billData = buildPublicBillData(order);
+      generated = await generateAndSaveBillPdf(billData, billsDir);
+      order.billPdfPath = generated.filePath;
+      order.billFileName = generated.fileName;
+    } catch (pdfErr: any) {
+      console.error('[Billing] PDF Generation failed:', pdfErr);
+      res.status(500).json({
+        success: false,
+        error: `Failed to generate PDF: ${pdfErr?.message || pdfErr}`,
+        code: 'BILL_PDF_GENERATION_FAILED',
+      });
+      return;
+    }
 
     // 2. Upload to Google Drive (with duplicate prevention & target folder)
     const driveResult = await uploadBillToGoogleDrive({
@@ -2076,6 +2106,17 @@ app.post('/api/admin/orders/:id/bill', requireAdminAuth, async (req: Request, re
 
     saveStore();
 
+    if (driveResult.status !== 'VERIFIED') {
+      res.status(400).json({
+        success: false,
+        error: driveResult.message || 'Google Drive bill upload failed',
+        code: driveResult.status === 'BLOCKED_CONFIG_REQUIRED' ? 'BILL_DRIVE_AUTH_FAILED' : 'BILL_DRIVE_UPLOAD_FAILED',
+        order,
+        driveResult,
+      });
+      return;
+    }
+
     // Secondary Asynchronous Sync to Google Sheets (Non-blocking)
     void updateOrderInSheet(order.id, {
       'Bill Number': order.billNumber,
@@ -2093,7 +2134,11 @@ app.post('/api/admin/orders/:id/bill', requireAdminAuth, async (req: Request, re
     });
   } catch (err: any) {
     console.error('Error generating bill:', err);
-    res.status(500).json({ error: `Failed to generate bill: ${err?.message || err}` });
+    res.status(500).json({
+      success: false,
+      error: `Failed to generate bill: ${err?.message || err}`,
+      code: 'BILL_PERSIST_FAILED',
+    });
   }
 });
 

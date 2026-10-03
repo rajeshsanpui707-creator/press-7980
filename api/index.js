@@ -769,16 +769,16 @@ var DEFAULT_BILL_FOLDER_ID = "1TB6Vfcj6AID8IR66OKcLZ7FbwYX8cPnq";
 function getGoogleDriveFolderId() {
   return process.env.GOOGLE_DRIVE_FOLDER_ID && process.env.GOOGLE_DRIVE_FOLDER_ID.trim() || DEFAULT_BILL_FOLDER_ID;
 }
-function formatBillFileName(orderId) {
+function formatBillFileName(orderId, billNumber) {
   const numericSuffix = String(orderId || "").replace(/^MP-/i, "").trim();
   return `MomentPress-Bill-MP-${numericSuffix || orderId}.pdf`;
 }
 function getGoogleDriveAuthType() {
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && process.env.GOOGLE_SERVICE_ACCOUNT_KEY.trim() || process.env.GOOGLE_APPLICATION_CREDENTIALS && process.env.GOOGLE_APPLICATION_CREDENTIALS.trim()) {
-    return "SERVICE_ACCOUNT";
-  }
   if (process.env.GOOGLE_DRIVE_CLIENT_ID && process.env.GOOGLE_DRIVE_REFRESH_TOKEN) {
     return "OAUTH_REFRESH_TOKEN";
+  }
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && process.env.GOOGLE_SERVICE_ACCOUNT_KEY.trim() || process.env.GOOGLE_APPLICATION_CREDENTIALS && process.env.GOOGLE_APPLICATION_CREDENTIALS.trim()) {
+    return "SERVICE_ACCOUNT";
   }
   return "NONE";
 }
@@ -907,9 +907,12 @@ async function uploadBillToGoogleDrive(params) {
     };
     if (!params.forceReupload) {
       const escapedFileName = fileName.replace(/'/g, "\\'");
-      const searchQuery = encodeURIComponent(`'${folderId}' in parents and name = '${escapedFileName}' and trashed = false`);
+      const legacyFileName = `MomentPress-Bill-${params.orderId}.pdf`.replace(/'/g, "\\'");
+      const searchQuery = encodeURIComponent(
+        `'${folderId}' in parents and (name = '${escapedFileName}' or name = '${legacyFileName}') and trashed = false`
+      );
       const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${searchQuery}&fields=files(id,name,webViewLink,webContentLink)`,
+        `https://www.googleapis.com/drive/v3/files?q=${searchQuery}&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,webViewLink,webContentLink)`,
         { headers: authHeaders }
       );
       if (searchRes.ok) {
@@ -917,7 +920,7 @@ async function uploadBillToGoogleDrive(params) {
         const existing = searchJson.files && searchJson.files[0];
         if (existing && existing.id) {
           try {
-            await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}/permissions`, {
+            await fetch(`https://www.googleapis.com/drive/v3/files/${existing.id}/permissions?supportsAllDrives=true`, {
               method: "POST",
               headers: { ...authHeaders, "Content-Type": "application/json" },
               body: JSON.stringify({ role: "reader", type: "anyone" })
@@ -931,7 +934,7 @@ async function uploadBillToGoogleDrive(params) {
             message: "Existing Google Drive bill found in folder and reused (duplicate upload prevented).",
             folderPath,
             folderId,
-            fileName,
+            fileName: existing.name || fileName,
             fileId: existing.id,
             webViewLink: webViewLink2,
             webContentLink: webContentLink2,
@@ -948,7 +951,7 @@ async function uploadBillToGoogleDrive(params) {
     };
     const { body: multipartData, boundary } = buildMultipartBody(fileMetadata, params.pdfBuffer);
     const uploadRes = await fetch(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink",
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink,webContentLink",
       {
         method: "POST",
         headers: {
@@ -956,7 +959,7 @@ async function uploadBillToGoogleDrive(params) {
           "Content-Type": `multipart/related; boundary=${boundary}`,
           "Content-Length": String(multipartData.length)
         },
-        body: new Uint8Array(multipartData)
+        body: multipartData
       }
     );
     if (!uploadRes.ok) {
@@ -970,7 +973,7 @@ async function uploadBillToGoogleDrive(params) {
       if (uploadRes.status === 404 || uploadRes.status === 403) {
         return {
           status: "ERROR",
-          message: `Google Drive upload blocked: Folder ${folderId} is not accessible. Please ensure folder is shared with the Service Account email with Editor permission. Details: ${parsedErr}`,
+          message: `Google Drive upload blocked: Folder ${folderId} is not accessible. Please ensure folder is valid and shared with the authenticated account. Details: ${parsedErr}`,
           folderPath,
           folderId,
           fileName
@@ -987,17 +990,25 @@ async function uploadBillToGoogleDrive(params) {
     const uploadJson = await uploadRes.json();
     const fileId = uploadJson.id;
     if (fileId) {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-        method: "POST",
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          role: "reader",
-          type: "anyone"
-        })
-      });
+      try {
+        const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true`, {
+          method: "POST",
+          headers: {
+            ...authHeaders,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            role: "reader",
+            type: "anyone"
+          })
+        });
+        if (!permRes.ok) {
+          const permErr = await permRes.text();
+          console.warn(`[Google Drive] Setting public link permission note for ${fileId}:`, permErr);
+        }
+      } catch (permErr) {
+        console.warn(`[Google Drive] Setting public link permission error:`, permErr?.message || permErr);
+      }
     }
     const webViewLink = uploadJson.webViewLink || `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
     const webContentLink = uploadJson.webContentLink || `https://drive.google.com/uc?id=${fileId}&export=download`;
@@ -2722,11 +2733,11 @@ function buildPublicBillData(order) {
     billDriveDownloadUrl: order.billDriveDownloadUrl,
     billDriveStatus: order.billDriveStatus,
     customer: {
-      name: order.customerName || "Valued Customer",
-      mobileNumber: order.mobileNumber || "",
-      address: order.address || "",
-      city: order.city || "Kolkata",
-      pincode: order.pincode || ""
+      name: order.customerName || order.customer?.name || "Valued Customer",
+      mobileNumber: order.mobileNumber || order.customer?.phone || order.phone || "",
+      address: order.address || order.customer?.address || "",
+      city: order.city || order.customer?.city || "Kolkata",
+      pincode: order.pincode || order.customer?.pincode || ""
     },
     item: {
       product: order.product || "Custom Photo Frames",
@@ -2736,7 +2747,7 @@ function buildPublicBillData(order) {
       quantity: Number(order.quantity) || 1,
       unitPrice: Number(order.unitPrice ?? order.sellingPrice ?? order.finalAmount) || 0,
       discount: Number(order.discount) || 0,
-      finalAmount: Number(order.finalAmount) || 0,
+      finalAmount: Number(order.finalAmount ?? order.totalPrice) || 0,
       requirements: order.requirements || ""
     },
     studio: {
@@ -2814,17 +2825,22 @@ app.get("/api/public/bills/:token/pdf", async (req, res) => {
   try {
     const billData = buildPublicBillData(order);
     const billsDir = getBillsDir();
-    const filePath = order.billPdfPath && fs2.existsSync(order.billPdfPath) ? order.billPdfPath : path2.join(billsDir, `MomentPress-Bill-${order.id}.pdf`);
-    if (!fs2.existsSync(filePath)) {
+    let pdfBuffer;
+    if (order.billPdfPath && fs2.existsSync(order.billPdfPath)) {
+      pdfBuffer = await fs2.promises.readFile(order.billPdfPath);
+    } else {
       const generated = await generateAndSaveBillPdf(billData, billsDir);
       order.billPdfPath = generated.filePath;
       order.billFileName = generated.fileName;
       saveStore();
+      pdfBuffer = generated.buffer;
     }
-    const fileName = `MomentPress-Bill-${order.id}.pdf`;
+    const numericSuffix = (order.id || "").replace(/^MP-/i, "");
+    const fileName = `MomentPress-Bill-MP-${numericSuffix || order.id}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    fs2.createReadStream(filePath).pipe(res);
+    res.setHeader("Content-Length", String(pdfBuffer.length));
+    res.send(pdfBuffer);
   } catch (err) {
     console.error("Error streaming public bill PDF:", err);
     res.status(500).json({ error: "Failed to generate PDF" });
@@ -2885,8 +2901,8 @@ app.get("/api/admin/orders/:id/pdf", requireAdminAuth, async (req, res) => {
   }
   try {
     const billsDir = getBillsDir();
-    let filePath = order.billPdfPath;
-    if (!filePath || !fs2.existsSync(filePath)) {
+    let pdfBuffer;
+    if (!order.billPdfPath || !fs2.existsSync(order.billPdfPath)) {
       const numericSuffix2 = (order.id || "").replace(/^MP-/i, "");
       order.billNumber = order.billNumber || `MP-BILL-${numericSuffix2 || Date.now()}`;
       order.billToken = order.billToken || crypto.randomBytes(24).toString("hex");
@@ -2897,7 +2913,9 @@ app.get("/api/admin/orders/:id/pdf", requireAdminAuth, async (req, res) => {
       order.billPdfPath = generated.filePath;
       order.billFileName = generated.fileName;
       saveStore();
-      filePath = generated.filePath;
+      pdfBuffer = generated.buffer;
+    } else {
+      pdfBuffer = await fs2.promises.readFile(order.billPdfPath);
     }
     const isDownload = req.query.download === "true";
     const disposition = isDownload ? "attachment" : "inline";
@@ -2905,7 +2923,8 @@ app.get("/api/admin/orders/:id/pdf", requireAdminAuth, async (req, res) => {
     const fileName = `MomentPress-Bill-MP-${numericSuffix || order.id}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
-    fs2.createReadStream(filePath).pipe(res);
+    res.setHeader("Content-Length", String(pdfBuffer.length));
+    res.send(pdfBuffer);
   } catch (err) {
     console.error("Error generating or streaming PDF:", err);
     res.status(500).json({ error: "Failed to stream PDF" });
@@ -2919,14 +2938,23 @@ app.post("/api/admin/orders/:id/bill", requireAdminAuth, async (req, res) => {
     order = store.offlineSales.find((s) => s.id === id);
   }
   if (!order) {
-    res.status(404).json({ error: "Order not found" });
+    res.status(404).json({ success: false, error: "Order not found", code: "BILL_ORDER_NOT_FOUND" });
     return;
   }
-  if (!isRegenerate && order.billGenerated && order.billNumber && order.billToken && order.billPdfPath && fs2.existsSync(order.billPdfPath)) {
+  if (!isRegenerate && order.billGenerated && order.billNumber && (order.billDriveStatus === "VERIFIED" || order.billPdfPath && fs2.existsSync(order.billPdfPath))) {
     res.json({
       success: true,
       alreadyGenerated: true,
-      order
+      order,
+      driveResult: {
+        status: order.billDriveStatus || "VERIFIED",
+        message: order.billDriveMessage || "Bill already generated and verified.",
+        fileId: order.billDriveFileId,
+        webViewLink: order.billDriveUrl,
+        webContentLink: order.billDriveDownloadUrl,
+        uploadedAt: order.billUploadedAt,
+        reused: true
+      }
     });
     return;
   }
@@ -2939,11 +2967,22 @@ app.post("/api/admin/orders/:id/bill", requireAdminAuth, async (req, res) => {
     order.billToken = billToken;
     order.billGeneratedAt = billGeneratedAt;
     order.billGenerated = true;
-    const billsDir = getBillsDir();
-    const billData = buildPublicBillData(order);
-    const generated = await generateAndSaveBillPdf(billData, billsDir);
-    order.billPdfPath = generated.filePath;
-    order.billFileName = generated.fileName;
+    let generated;
+    try {
+      const billsDir = getBillsDir();
+      const billData = buildPublicBillData(order);
+      generated = await generateAndSaveBillPdf(billData, billsDir);
+      order.billPdfPath = generated.filePath;
+      order.billFileName = generated.fileName;
+    } catch (pdfErr) {
+      console.error("[Billing] PDF Generation failed:", pdfErr);
+      res.status(500).json({
+        success: false,
+        error: `Failed to generate PDF: ${pdfErr?.message || pdfErr}`,
+        code: "BILL_PDF_GENERATION_FAILED"
+      });
+      return;
+    }
     const driveResult = await uploadBillToGoogleDrive({
       orderId: order.id,
       pdfBuffer: generated.buffer,
@@ -2963,6 +3002,16 @@ app.post("/api/admin/orders/:id/bill", requireAdminAuth, async (req, res) => {
       order.billUploadedAt = driveResult.uploadedAt;
     }
     saveStore();
+    if (driveResult.status !== "VERIFIED") {
+      res.status(400).json({
+        success: false,
+        error: driveResult.message || "Google Drive bill upload failed",
+        code: driveResult.status === "BLOCKED_CONFIG_REQUIRED" ? "BILL_DRIVE_AUTH_FAILED" : "BILL_DRIVE_UPLOAD_FAILED",
+        order,
+        driveResult
+      });
+      return;
+    }
     void updateOrderInSheet(order.id, {
       "Bill Number": order.billNumber,
       "Bill Drive Link": order.billDriveUrl || "",
@@ -2978,7 +3027,11 @@ app.post("/api/admin/orders/:id/bill", requireAdminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Error generating bill:", err);
-    res.status(500).json({ error: `Failed to generate bill: ${err?.message || err}` });
+    res.status(500).json({
+      success: false,
+      error: `Failed to generate bill: ${err?.message || err}`,
+      code: "BILL_PERSIST_FAILED"
+    });
   }
 });
 function findOrderMapping(order) {

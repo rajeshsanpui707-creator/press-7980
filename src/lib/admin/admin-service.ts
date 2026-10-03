@@ -781,7 +781,7 @@ export const AdminService = {
   async generateOrderBill(
     orderId: string,
     options?: { regenerate?: boolean }
-  ): Promise<{ success: boolean; order?: AdminOnlineOrder; driveResult?: any; error?: string }> {
+  ): Promise<{ success: boolean; order?: AdminOnlineOrder; driveResult?: any; error?: string; code?: string }> {
     const token = this.getAuthToken();
     if (!token) return { success: false, error: 'Unauthorized: Admin session required' };
 
@@ -796,7 +796,7 @@ export const AdminService = {
       });
       const data = await res.json();
       if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to generate bill' };
+        return { success: false, error: data.error || 'Failed to generate bill', code: data.code };
       }
 
       if (data.order) {
@@ -807,7 +807,7 @@ export const AdminService = {
           this.saveOnlineOrders(orders);
         }
       }
-      return { success: true, order: data.order };
+      return { success: true, order: data.order, driveResult: data.driveResult };
     } catch (err: any) {
       return { success: false, error: err.message || 'Network error generating bill' };
     }
