@@ -2990,7 +2990,7 @@ app.post('/api/admin/clear-all', requireAdminAuth, (req: Request, res: Response)
 });
 
 // Explicit JSON 404 handler for unmatched API routes
-app.all('/api/*', (req: Request, res: Response) => {
+app.all(['/api', '/api/*'], (req: Request, res: Response) => {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.path}` });
 });
 
@@ -3017,7 +3017,8 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 // ==========================================
 async function startServer() {
   if (!isProduction) {
-    const { createServer: createViteServer } = await import('vite');
+    const vitePkg = 'vite';
+    const { createServer: createViteServer } = await import(/* @vite-ignore */ vitePkg);
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
