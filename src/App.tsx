@@ -7,6 +7,7 @@ import { HowItWorks } from './components/how-it-works/HowItWorks';
 import { ReviewsSection } from './components/reviews/ReviewsSection';
 import { FaqSection } from './components/faq/FaqSection';
 import { FinalCta } from './components/cta/FinalCta';
+import { GiftOccasions } from './components/gifting/GiftOccasions';
 import { Footer } from './components/layout/Footer';
 import { FloatingWhatsApp } from './components/common/FloatingWhatsApp';
 import { ExistingDesignsPage } from './components/pages/ExistingDesignsPage';
@@ -41,6 +42,7 @@ export type PageType =
   | 'existing-designs'
   | 'faq'
   | 'contact'
+  | 'gift-occasions'
   | 'admin'
   | 'order-quality'
   | 'order-review'
@@ -100,6 +102,9 @@ function getPageFromLocation(): PageType {
   }
   if (hash === '#contact' || path === '/contact') {
     return 'contact';
+  }
+  if (hash === '#gift-occasions' || path === '/gift-occasions') {
+    return 'gift-occasions';
   }
   if (
     hash.startsWith('#order/quality') ||
@@ -589,6 +594,8 @@ export default function App() {
                     );
                   case 'how-it-works':
                     return <HowItWorks key="how-it-works" />;
+                  case 'gift-occasions':
+                    return <GiftOccasions key="gift-occasions" />;
                   case 'existing-designs':
                     return (
                       <section

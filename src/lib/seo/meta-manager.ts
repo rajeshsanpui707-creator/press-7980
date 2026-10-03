@@ -4,6 +4,10 @@ import {
   generateProductSchema,
   generateFaqSchema,
   generateBreadcrumbSchema,
+  generateServiceSchema,
+  generateFrameSizeProductSchemas,
+  generateFrameSizeItemList,
+  generateQualityTierItemList,
 } from './schema-generator';
 import { AdminService } from '../admin/admin-service';
 import { SITE_CONFIG } from '../config/site-config';
@@ -114,7 +118,13 @@ function updateJsonLdScripts(pageKey: string, config: PageSeoConfig): void {
     injectJsonLd(orgSchema);
   }
 
-  // 2. Product Schema on Homepage or Product Pages
+  // 2. Service Schema on all public indexable pages (describes the custom framing service)
+  if (!config.robots.includes('noindex')) {
+    const serviceSchema = generateServiceSchema();
+    injectJsonLd(serviceSchema);
+  }
+
+  // 3. Product Schema on Homepage or Product Pages
   if (pageKey === 'home' || pageKey === 'custom-photo-frames') {
     const frameProductSchema = generateProductSchema('custom-photo-frames');
     injectJsonLd(frameProductSchema);
@@ -125,7 +135,19 @@ function updateJsonLdScripts(pageKey: string, config: PageSeoConfig): void {
     injectJsonLd(stickerProductSchema);
   }
 
-  // 3. FAQ Schema if relevant
+  // 4. Individual Frame Size Product Schemas on custom-photo-frames page
+  if (pageKey === 'custom-photo-frames') {
+    const frameSizeSchemas = generateFrameSizeProductSchemas();
+    frameSizeSchemas.forEach((schema) => injectJsonLd(schema));
+    // Also inject ItemList for frame sizes
+    const frameSizeItemList = generateFrameSizeItemList();
+    injectJsonLd(frameSizeItemList);
+    // And ItemList for quality tiers
+    const qualityTierItemList = generateQualityTierItemList();
+    injectJsonLd(qualityTierItemList);
+  }
+
+  // 5. FAQ Schema if relevant
   if (pageKey === 'home' || pageKey === 'faq') {
     const faqSchema = generateFaqSchema();
     if (faqSchema) {
@@ -133,7 +155,7 @@ function updateJsonLdScripts(pageKey: string, config: PageSeoConfig): void {
     }
   }
 
-  // 4. Breadcrumbs Schema if provided
+  // 6. Breadcrumbs Schema if provided
   if (config.breadcrumbs && config.breadcrumbs.length > 1) {
     const breadcrumbSchema = generateBreadcrumbSchema(config.breadcrumbs);
     injectJsonLd(breadcrumbSchema);

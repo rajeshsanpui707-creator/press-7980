@@ -56,6 +56,16 @@ export const Hero: React.FC<HeroProps> = ({ onOpenCustomizer, onNavigateExisting
               {subheading}
             </p>
 
+            {/* AEO Quick Answer - What we do */}
+            <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-xl bg-white border border-[#F3F0EA] max-w-xl">
+              <h2 className="font-bold text-xs sm:text-sm text-[#171717] mb-2">
+                What is MomentPress?
+              </h2>
+              <p className="text-[10.5px] sm:text-xs text-[#6B6258] leading-relaxed">
+                MomentPress handcrafts custom photo frames from your own photos. Choose from 5 sizes (5×7 to 12×18 in), 4 solid wood finishes, and 3 archival paper tiers. We print on 12-color pigment printers, send a free WhatsApp proof for approval, and deliver in Kolkata within 48 hours.
+              </p>
+            </div>
+
             {/* CTA Group */}
             <div className="mt-4 sm:mt-8 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3.5 w-full sm:w-auto">
               {/* Primary CTA: BLACK BUTTON with WHITE TEXT */}

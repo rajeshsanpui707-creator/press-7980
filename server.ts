@@ -53,7 +53,7 @@ Disallow: /api/
 Disallow: /order/
 
 # XML Sitemap
-Sitemap: https://momentpress.ai.studio/sitemap.xml
+Sitemap: https://press-7980.vercel.app/sitemap.xml
 `;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -65,12 +65,12 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
   const today = new Date().toISOString().split('T')[0];
 
   const publicRoutes = [
-    { loc: 'https://momentpress.ai.studio/', priority: '1.0' },
-    { loc: 'https://momentpress.ai.studio/custom-photo-frames', priority: '0.9' },
-    { loc: 'https://momentpress.ai.studio/photo-stickers', priority: '0.9' },
-    { loc: 'https://momentpress.ai.studio/existing-designs', priority: '0.8' },
-    { loc: 'https://momentpress.ai.studio/faq', priority: '0.7' },
-    { loc: 'https://momentpress.ai.studio/contact', priority: '0.7' },
+    { loc: 'https://press-7980.vercel.app/', priority: '1.0' },
+    { loc: 'https://press-7980.vercel.app/custom-photo-frames', priority: '0.9' },
+    { loc: 'https://press-7980.vercel.app/photo-stickers', priority: '0.9' },
+    { loc: 'https://press-7980.vercel.app/existing-designs', priority: '0.8' },
+    { loc: 'https://press-7980.vercel.app/faq', priority: '0.7' },
+    { loc: 'https://press-7980.vercel.app/contact', priority: '0.7' },
   ];
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;

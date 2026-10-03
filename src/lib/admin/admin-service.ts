@@ -55,10 +55,11 @@ export const DEFAULT_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
   { id: 'trust', name: 'Trust Indicators', description: 'Free digital proof, anti-glare glass & 48h delivery badges', visible: true, displayOrder: 2 },
   { id: 'products', name: 'Products & Frame Customizer', description: 'Product cards and interactive sizing & customization workspace', visible: true, displayOrder: 3 },
   { id: 'how-it-works', name: 'How It Works', description: '4-step simple order guide (Select, WhatsApp, Proof, Delivery)', visible: true, displayOrder: 4 },
-  { id: 'existing-designs', name: 'Existing Designs Showcase Banner', description: 'Curated gallery link banner inviting customers to explore designs', visible: true, displayOrder: 5 },
-  { id: 'reviews', name: 'Customer Reviews', description: 'Verified customer feedback and testimonials across Kolkata', visible: true, displayOrder: 6 },
-  { id: 'faq', name: 'Frequently Asked Questions', description: 'Answers to common framing, printing, and delivery questions', visible: true, displayOrder: 7 },
-  { id: 'final-cta', name: 'Final Conversion CTA', description: 'Bottom call-to-action banner driving frame customization', visible: true, displayOrder: 8 },
+  { id: 'gift-occasions', name: 'Gift Occasions', description: 'Curated gift ideas for anniversaries, birthdays, weddings, and more', visible: true, displayOrder: 5 },
+  { id: 'existing-designs', name: 'Existing Designs Showcase Banner', description: 'Curated gallery link banner inviting customers to explore designs', visible: true, displayOrder: 6 },
+  { id: 'reviews', name: 'Customer Reviews', description: 'Verified customer feedback and testimonials across Kolkata', visible: true, displayOrder: 7 },
+  { id: 'faq', name: 'Frequently Asked Questions', description: 'Answers to common framing, printing, and delivery questions', visible: true, displayOrder: 8 },
+  { id: 'final-cta', name: 'Final Conversion CTA', description: 'Bottom call-to-action banner driving frame customization', visible: true, displayOrder: 9 },
 ];
 
 export const DEFAULT_HOMEPAGE_HERO: HomepageHeroConfig = {

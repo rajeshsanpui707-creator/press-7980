@@ -1,7 +1,7 @@
 /**
  * Production Domain & Canonical URL Constants
  */
-export const PRODUCTION_DOMAIN = 'https://momentpress.ai.studio';
+export const PRODUCTION_DOMAIN = 'https://press-7980.vercel.app';
 
 /**
  * Standard MomentPress Page SEO Configurations
@@ -111,6 +111,26 @@ export const SEO_PRESETS: Record<string, PageSeoConfig> = {
     breadcrumbs: [
       { name: 'Home', path: '/' },
       { name: 'Contact', path: '/contact' },
+    ],
+  },
+  'gift-occasions': {
+    title: 'Gift Ideas — Custom Photo Frames for Anniversaries, Birthdays & Weddings | MomentPress',
+    description:
+      'Find the perfect custom photo frame gift for anniversaries, birthdays, weddings, housewarmings, and more. Handcrafted in Kolkata with archival quality.',
+    canonicalPath: '/gift-occasions',
+    robots: 'index, follow, max-image-preview:large',
+    ogType: 'website',
+    keywords: [
+      'anniversary photo frame gift',
+      'birthday photo frame gift',
+      'wedding photo frame gift',
+      'housewarming photo frame gift',
+      'personalized gift with photo',
+      'custom photo frame gift',
+    ],
+    breadcrumbs: [
+      { name: 'Home', path: '/' },
+      { name: 'Gift Occasions', path: '/gift-occasions' },
     ],
   },
   'order-quality': {

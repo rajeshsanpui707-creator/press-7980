@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container } from '../layout/Container';
 import { SectionHeading } from '../common/SectionHeading';
 import { FAQItem } from './FAQItem';
-import { FAQ_SECTION_DATA, STATIC_FAQ_ITEMS } from '../../data/faq';
+import { FAQ_SECTION_DATA, FAQ_ITEMS, STATIC_FAQ_ITEMS } from '../../data/faq';
 import { MessageCircle } from 'lucide-react';
 import { createWhatsAppLink, WHATSAPP_MESSAGES } from '../../lib/whatsapp/whatsapp';
 import { AdminService } from '../../lib/admin/admin-service';
@@ -25,7 +25,7 @@ export const FAQ: React.FC = () => {
   };
 
   const [items, setItems] = useState<FaqItem[]>(getFaqs);
-  const [openIds, setOpenIds] = useState<string[]>(() => [items[0]?.id || 'faq-1']);
+  const [openIds, setOpenIds] = useState<string[]>(() => [items[0]?.id || 'faq-what-is-custom-photo-frame']);
 
   useEffect(() => {
     AdminService.fetchPublicConfig().then(() => {
@@ -40,6 +40,16 @@ export const FAQ: React.FC = () => {
     );
   };
 
+  // AEO Answer-First Quick Answers Section
+  const aeoQuestions = [
+    'faq-what-is-custom-photo-frame',
+    'faq-how-to-order-custom-photo-frame',
+    'faq-custom-photo-frame-sizes',
+    'faq-photo-frame-turnaround-time',
+    'faq-free-digital-proof',
+    'faq-photo-frame-gift',
+  ];
+
   return (
     <section
       id="faq"
@@ -53,7 +63,31 @@ export const FAQ: React.FC = () => {
           subtitle={FAQ_SECTION_DATA.supportingText}
         />
 
-        {/* Minimal border-divided FAQ list */}
+        {/* AEO Quick Answers - Answer-first format for AI search engines */}
+        <div className="mb-8 space-y-4" role="list" aria-label="Quick answers">
+          {aeoQuestions
+            .map((id) => items.find((item) => item.id === id))
+            .filter(Boolean)
+            .map((item) => (
+              <article
+                key={item!.id}
+                className="bg-white rounded-xl border border-[#F3F0EA] p-4 sm:p-6 shadow-xs"
+                role="listitem"
+              >
+                <h3 className="font-bold text-sm sm:text-base text-[#171717] mb-2">
+                  {item!.question}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#6B6258] leading-relaxed">
+                  {item!.answer.split('.')[0]}.{' '}
+                  <span className="font-medium text-[#C25E34]">
+                    Read more
+                  </span>
+                </p>
+              </article>
+            ))}
+        </div>
+
+        {/* Full FAQ List */}
         <div className="border-t border-[#F3F0EA] divide-y divide-[#F3F0EA]">
           {items.map((item) => (
             <FAQItem

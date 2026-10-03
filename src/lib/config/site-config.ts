@@ -19,6 +19,7 @@ export const STATIC_DEFAULT_CONFIG = {
   navLinks: [
     { label: 'Home', href: '#home' },
     { label: 'Products', href: '#products' },
+    { label: 'Gift Ideas', href: '#gift-occasions' },
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'Reviews', href: '#reviews' },
     { label: 'FAQ', href: '#faq' },

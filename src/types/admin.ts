@@ -4,7 +4,7 @@ export type PaymentStatus = 'Paid' | 'Pending' | 'Partial' | 'Cash on Delivery';
 export type PhotoStatus = 'Pending Upload' | 'Photos Received' | 'Proof Prepared' | 'Proof Approved';
 
 export interface HomepageSectionConfig {
-  id: 'hero' | 'trust' | 'products' | 'how-it-works' | 'existing-designs' | 'reviews' | 'faq' | 'final-cta';
+  id: 'hero' | 'trust' | 'products' | 'how-it-works' | 'gift-occasions' | 'existing-designs' | 'reviews' | 'faq' | 'final-cta';
   name: string;
   description: string;
   visible: boolean;
