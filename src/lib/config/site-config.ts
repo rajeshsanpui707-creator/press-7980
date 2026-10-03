@@ -13,7 +13,7 @@ export const STATIC_DEFAULT_CONFIG = {
     email: 'connect.rrstudio@gmail.com',
     instagramHandle: '@_rr.studio__',
     instagramUrl: 'https://www.instagram.com/_rr.studio__/',
-    address: 'Bowbazar, Central Kolkata, West Bengal 700012',
+    address: 'New Town, Kolkata, West Bengal 700156',
     deliveryPromiseHours: 48,
   },
   navLinks: [

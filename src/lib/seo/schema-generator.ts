@@ -30,7 +30,7 @@ export function generateOrganizationSchema(): object {
           streetAddress: address,
           addressLocality: 'Kolkata',
           addressRegion: 'West Bengal',
-          postalCode: '700012',
+          postalCode: '700156',
           addressCountry: 'IN',
         },
         contactPoint: [
@@ -77,7 +77,7 @@ export function generateOrganizationSchema(): object {
           streetAddress: address,
           addressLocality: 'Kolkata',
           addressRegion: 'West Bengal',
-          postalCode: '700012',
+          postalCode: '700156',
           addressCountry: 'IN',
         },
         geo: {
@@ -251,7 +251,7 @@ export function generateFrameSizeProductSchemas(): object[] {
     '@type': 'Product',
     '@id': `${PRODUCTION_DOMAIN}/custom-photo-frames#${size.id}`,
     name: `${brandName} Custom Photo Frame — ${size.name}`,
-    description: `Handcrafted ${size.name} solid wood frame with crystal protective glass and your choice of archival photo paper. Made in Bowbazar, Kolkata.`,
+    description: `Handcrafted ${size.name} solid wood frame with crystal protective glass and your choice of archival photo paper. Made in New Town, Kolkata.`,
     brand: {
       '@type': 'Brand',
       name: brandName,

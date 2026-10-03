@@ -46,6 +46,7 @@ Allow: /photo-stickers
 Allow: /existing-designs
 Allow: /faq
 Allow: /contact
+Allow: /gift-occasions
 
 # Private Admin, Orders and API Routes
 Disallow: /admin/
@@ -71,6 +72,7 @@ app.get('/sitemap.xml', (req: Request, res: Response) => {
     { loc: 'https://press-7980.vercel.app/existing-designs', priority: '0.8' },
     { loc: 'https://press-7980.vercel.app/faq', priority: '0.7' },
     { loc: 'https://press-7980.vercel.app/contact', priority: '0.7' },
+    { loc: 'https://press-7980.vercel.app/gift-occasions', priority: '0.8' },
   ];
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
