@@ -11,8 +11,6 @@
  * status: "BLOCKED_CONFIG_REQUIRED" or "ERROR" with exact blocked details without faking a successful upload.
  */
 
-import { GoogleAuth, OAuth2Client } from 'google-auth-library';
-
 export const DEFAULT_BILL_FOLDER_ID = '1TB6Vfcj6AID8IR66OKcLZ7FbwYX8cPnq';
 
 export interface GoogleDriveUploadResult {
@@ -131,6 +129,7 @@ export async function uploadBillToGoogleDrive(params: {
   try {
     // 3. Acquire Google Drive API Access Token
     let accessToken: string | null | undefined = null;
+    const { GoogleAuth, OAuth2Client } = await import('google-auth-library');
 
     if (authType === 'OAUTH_REFRESH_TOKEN') {
       const clientId = process.env.GOOGLE_DRIVE_CLIENT_ID?.trim();
@@ -152,7 +151,7 @@ export async function uploadBillToGoogleDrive(params: {
         };
       }
     } else if (authType === 'SERVICE_ACCOUNT') {
-      let auth: GoogleAuth | null = null;
+      let auth: any = null;
       if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
         let credentials;
         try {
