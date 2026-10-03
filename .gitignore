@@ -10,6 +10,7 @@ data/
 *.backup
 *.bak
 *.tmp
+api/index.js
 
 # Credentials, Keys & Secrets (Zero Leakage)
 credentials/
